@@ -6,7 +6,7 @@ import (
         "time"
         "github.com/mozilla-services/heka/message"
         . "github.com/mozilla-services/heka/pipeline"
-        "code.google.com/p/go-uuid/uuid"
+        "github.com/pborman/uuid"
         "sync"
 )
 
@@ -61,11 +61,10 @@ func (f *StreamAggregatorFilter) committer(fr FilterRunner, h PluginHelper, wg *
         tag = f.StreamAggregatorTag
 
         for outBatch = range f.batchChan {
-                pack := h.PipelinePack(f.msgLoopCount)
-                if pack == nil {
-                        fr.LogError(fmt.Errorf("exceeded MaxMsgLoops = %d",
-                                h.PipelineConfig().Globals.MaxMsgLoops))
-            break   
+                pack, e := h.PipelinePack(f.msgLoopCount)
+                if e != nil {
+                        fr.LogError(e)
+                        break
                 }
         
                 tagField, _ := message.NewField("StreamAggregatorTag", tag, "")
@@ -120,7 +119,7 @@ func (f *StreamAggregatorFilter) receiver(fr FilterRunner, h PluginHelper, encod
                             }
                             outBytes = outBytes[:0]
                         } 
-                        pack.Recycle()
+                        pack.Recycle(nil)
                 case <-ticker:
                         if len(outBatch) > 0 {
                         f.batchChan <- outBatch
