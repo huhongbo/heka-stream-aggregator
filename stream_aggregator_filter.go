@@ -4,6 +4,7 @@ package stream_aggregator
 import (
         "fmt"
         "time"
+        "strings"
         "github.com/mozilla-services/heka/message"
         . "github.com/mozilla-services/heka/pipeline"
         "github.com/pborman/uuid"
@@ -24,6 +25,7 @@ type StreamAggregatorFilterConfig struct {
         FlushBytes    int    `toml:"flush_bytes"`
         StreamAggregatorTag       string `toml:"stream_aggregator_tag"`
         EncoderName   string `toml:"encoder"`
+        OutputType    string `toml:"output_type"`
 }
 
 func (f *StreamAggregatorFilter) ConfigStruct() interface{} {
@@ -32,6 +34,7 @@ func (f *StreamAggregatorFilter) ConfigStruct() interface{} {
         FlushInterval: 1000,
         FlushBytes:    10,
         StreamAggregatorTag:       "aggregated",
+        OutputType:    "string",
         }
 }
 
@@ -39,6 +42,10 @@ func (f *StreamAggregatorFilter) Init(config interface{}) (err error) {
         f.StreamAggregatorFilterConfig = config.(*StreamAggregatorFilterConfig)
         f.batchChan = make(chan []byte)
         f.backChan = make(chan []byte, 2)
+
+        if f.OutputType == "json" {
+            f.Delimiter = ","
+        }
 
         if f.StreamAggregatorTag == "" {
             return fmt.Errorf(`A stream_aggregator_tag value must be specified for the StreamAggregatorTag Field`)
@@ -70,7 +77,12 @@ func (f *StreamAggregatorFilter) committer(fr FilterRunner, h PluginHelper, wg *
                 tagField, _ := message.NewField("StreamAggregatorTag", tag, "")
                 pack.Message.AddField(tagField)
                 pack.Message.SetUuid(uuid.NewRandom())
-                pack.Message.SetPayload(string(outBatch))
+                if f.OutputType == "json" {
+                    jsonStr := strings.TrimRight(string(outBatch), ",")
+                    pack.Message.SetPayload("[" + jsonStr + "]")
+                } else {
+                    pack.Message.SetPayload(string(outBatch))
+                }
                 fr.Inject(pack)
 
                 outBatch = outBatch[:0]
